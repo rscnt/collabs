@@ -43,63 +43,6 @@ class RichText extends crdts.CObject<RichTextEvents> {
     RichTextArrayInsertArgs
   >;
 
-  private rtCharArrayInsertHandler(e: crdts.CListInsertEvent) {
-    for (let i = e.startIndex; i < e.startIndex + e.count; i++) {
-      const leftCharAttributes: crdts.LwwCMap<string, any> =
-        this.rtCharArray.get(i - 1).attributes;
-      const newChar = this.rtCharArray.get(i);
-
-      newChar.inheritLeftAttributesLocally(leftCharAttributes);
-
-      // processM2 is more like record M2
-      this.store.processM2({ character: newChar }, e.meta.timestamp);
-    }
-  }
-
-  private handleMFormat(m: MFormat | null) {
-    if (m) {
-      this.runtime.runLocally(() => {
-        m.targets.forEach((target) => {
-          Object.entries(m.attributes).forEach((kv) => {
-            target.attributes.set(kv[0], kv[1]);
-          });
-        });
-      });
-    }
-  }
-
-  private formatMessageHandler(e: crdts.CMessengerEvent<MFormat>) {
-    this.handleMFormat(this.store.processM1(e.message, e.meta.timestamp));
-  }
-
-  // private rtCharArra
-
-  private insertTextAndInheritAttributes(startIndex: number, text: string) {
-    text.split("").forEach((c, i) => {
-      this.rtCharArray.insert(startIndex + i + 1, c);
-    });
-  }
-
-  private action(m2: MAttributelessInsert, m1: MFormat): MFormat | null {
-    const insertedChar = m2.character;
-    const insertedCharIdx = this.rtCharArray
-        .findIndex((value) => value === insertedChar);
-    
-    const rightmostTargetedChar = m1.targets[m1.targets.length - 1];
-    const rightmostTargetedCharIdx = this.rtCharArray
-        .findIndex((value) => value === rightmostTargetedChar);
-    
-    if (insertedCharIdx - rightmostTargetedCharIdx === 1) {
-      return {
-        targets: [...m1.targets, insertedChar],
-        attributes: m1.attributes
-      };
-    } else {
-      return m1;
-    }
-    
-  }
-
   constructor(initToken: crdts.CrdtInitToken) {
     super(initToken);
 
@@ -130,6 +73,54 @@ class RichText extends crdts.CObject<RichTextEvents> {
     );
     this.rtCharArray.on("Insert", this.rtCharArrayInsertHandler);
   }
+  
+  private action(m2: MAttributelessInsert, m1: MFormat): MFormat | null {
+    const insertedChar = m2.character;
+    const insertedCharIdx = this.rtCharArray
+        .findIndex((value) => value === insertedChar);
+    
+    const rightmostTargetedChar = m1.targets[m1.targets.length - 1];
+    const rightmostTargetedCharIdx = this.rtCharArray
+        .findIndex((value) => value === rightmostTargetedChar);
+    
+    if (insertedCharIdx - rightmostTargetedCharIdx === 1) {
+      return {
+        targets: [...m1.targets, insertedChar],
+        attributes: m1.attributes
+      };
+    } else {
+      return m1;
+    }
+  }
+  
+  private formatMessageHandler(e: crdts.CMessengerEvent<MFormat>) {
+    this.handleMFormat(this.store.processM1(e.message, e.meta.timestamp));
+  }
+  
+  private handleMFormat(m: MFormat | null) {
+    if (m) {
+      this.runtime.runLocally(() => {
+        m.targets.forEach((target) => {
+          Object.entries(m.attributes).forEach((kv) => {
+            target.attributes.set(kv[0], kv[1]);
+          });
+        });
+      });
+    }
+  }
+  
+  private rtCharArrayInsertHandler(e: crdts.CListInsertEvent) {
+    for (let i = e.startIndex; i < e.startIndex + e.count; i++) {
+      const leftCharAttributes: crdts.LwwCMap<string, any> =
+          this.rtCharArray.get(i - 1).attributes;
+      const newChar = this.rtCharArray.get(i);
+      
+      newChar.inheritLeftAttributesLocally(leftCharAttributes);
+      
+      // processM2 is more like record M2
+      this.store.processM2({ character: newChar }, e.meta.timestamp);
+    }
+  }
 
   public formatText(
     startIndex: number,
@@ -148,7 +139,7 @@ class RichText extends crdts.CObject<RichTextEvents> {
     text: string,
     attributes: Record<string, any>
   ) {
-    // TODO: Get unique attributes. (Should I handle this logic here or in the cod ethat integrates it with quill?)
+    // TODO: Get unique attributes. (Should I handle this logic here or in the code that integrates it with quill?)
     const leftAttributes = this.rtCharArray.get(startIndex).attributes;
     const uniqueAttributes = Object.fromEntries(
       Object.entries(attributes).filter((kv) => {
@@ -158,5 +149,11 @@ class RichText extends crdts.CObject<RichTextEvents> {
 
     this.insertTextAndInheritAttributes(startIndex, text);
     this.formatText(startIndex, text.length, uniqueAttributes);
+  }
+  
+  private insertTextAndInheritAttributes(startIndex: number, text: string) {
+    text.split("").forEach((c, i) => {
+      this.rtCharArray.insert(startIndex + i + 1, c);
+    });
   }
 }
