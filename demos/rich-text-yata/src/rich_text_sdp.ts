@@ -6,11 +6,16 @@ class RichTextCharacter extends crdts.CObject<RichTextCharacterEvents> {
   // This is the structure of each object in the array.
   public character: string; // Character being represented
   public attributes: crdts.LwwCMap<string, any>; // Current attributes CRDT
+  public deleted: crdts.LwwCRegister<boolean>;
 
   constructor(initToken: crdts.CrdtInitToken, character: string) {
     super(initToken);
     this.character = character;
     this.attributes = this.addChild("attributes", crdts.Pre(crdts.LwwCMap)());
+    this.deleted = this.addChild(
+      "deleted",
+      crdts.Pre(crdts.LwwCRegister)(false as boolean)
+    );
   }
 
   inheritLeftAttributesLocally(attributes: crdts.LwwCMap<string, any>) {
@@ -22,7 +27,27 @@ class RichTextCharacter extends crdts.CObject<RichTextCharacterEvents> {
   }
 }
 
-interface RichTextEvents extends crdts.CrdtEventsRecord {}
+interface RichTextEvents extends crdts.CrdtEventsRecord {
+  Insert: RichTextInsertEvent;
+  Delete: RichTextDeleteEvent;
+  Format: RichTextFormatEvent;
+}
+
+export interface RichTextInsertEvent extends crdts.CrdtEvent {
+  startIndex: number;
+  text: string;
+}
+
+export interface RichTextDeleteEvent extends crdts.CrdtEvent {
+  startIndex: number;
+  count: number;
+}
+
+export interface RichTextFormatEvent extends crdts.CrdtEvent {
+  startIndex: number;
+  attributeName: string;
+  attributeValue: any;
+}
 
 type RichTextArrayInsertArgs = [character: string];
 
@@ -35,7 +60,7 @@ interface MAttributelessInsert {
   character: RichTextCharacter;
 }
 
-class RichText extends crdts.CObject<RichTextEvents> {
+export class RichText extends crdts.CObject<RichTextEvents> {
   private store: crdts.SemidirectProductStore<MFormat, MAttributelessInsert>;
   private formatMessenger: crdts.CMessenger<MFormat>;
   private rtCharArray: crdts.DeletingMutCList<
@@ -66,7 +91,25 @@ class RichText extends crdts.CObject<RichTextEvents> {
       "rtCharArray",
       crdts.Pre(crdts.DeletingMutCList)(
         (valueInitToken: crdts.CrdtInitToken, character: string) => {
-          return new RichTextCharacter(valueInitToken, character);
+          const newChar = new RichTextCharacter(valueInitToken, character);
+          newChar.attributes.on("Set", (e) => {
+            this.emit("Format", {
+              startIndex: this.rtCharArray.findIndex(
+                (value) => value === newChar
+              ),
+              attributeName: e.key,
+              attributeValue: newChar.attributes.get(e.key),
+              meta: e.meta
+            });
+          });
+          newChar.deleted.on("Set", (e) => {
+            this.emit("Delete", {
+              startIndex: this.rtCharArray.findIndex((value) => value === newChar),
+              count: 1,
+              meta: e.meta
+            });
+          });
+          return newChar;
         },
         [["start"], ["end"]]
       )
@@ -124,6 +167,8 @@ class RichText extends crdts.CObject<RichTextEvents> {
     }
   }
 
+  private rtCharArrayChangeHandler(e: crdts.CrdtEvent) {}
+
   public formatText(
     startIndex: number,
     count: number,
@@ -156,6 +201,13 @@ class RichText extends crdts.CObject<RichTextEvents> {
   private insertTextAndInheritAttributes(startIndex: number, text: string) {
     text.split("").forEach((c, i) => {
       this.rtCharArray.insert(startIndex + i + 1, c);
+    });
+  }
+
+  public deleteText(startIndex: number, count: number) {
+    [...Array(count).keys()].forEach((i) => {
+      const idx = startIndex + i + 1;
+      this.rtCharArray.get(idx).deleted.set(true);
     });
   }
 }
