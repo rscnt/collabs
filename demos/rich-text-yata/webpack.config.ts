@@ -12,7 +12,7 @@ const config: webpack.Configuration = {
     innerGraph: true,
     sideEffects: true,
   },
-  entry: "./src/rich_text_yata.ts",
+  entry: "./src/rich_text_quill.ts",
   output: {
     filename: "[name].js",
     path: path.resolve(__dirname, "dist"),
@@ -43,10 +43,10 @@ const config: webpack.Configuration = {
     // Create an HTML file as the entry point, instead of just
     // a .js file.
     new HtmlWebpackPlugin({
-      filename: "rich_text_yata.html",
+      filename: "rich_text_quill.html",
       // Use rich_text_yata.html as the HTML file,
       // instead of the plugin's default file.
-      template: "./src/rich_text_yata.html",
+      template: "./src/rich_text_quill.html",
       // Inject the compiled .js into <body> instead of
       // <head>.  This lets use access HTML elements immediately
       // in rich_text_yata.ts file, instead of awaiting window.onload.

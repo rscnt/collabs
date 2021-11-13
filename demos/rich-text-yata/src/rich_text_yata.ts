@@ -23,7 +23,7 @@ import Quill, { DeltaOperation } from "quill";
   );
 
   // const Quill: any = Q;
-  var quill = new Quill("#editor", {
+  var quill = new Quill("#yata-editor", {
     theme: "snow",
   });
   interface IDelta {
