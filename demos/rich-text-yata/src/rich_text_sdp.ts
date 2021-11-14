@@ -9,16 +9,11 @@ class RichTextCharacter extends crdts.CObject {
   // This is the structure of each object in the array.
   public character: string; // Character being represented
   public attributes: crdts.LwwCMap<string, any>; // Current attributes CRDT
-  public deleted: crdts.LwwCRegister<boolean>;
 
   constructor(initToken: crdts.CrdtInitToken, character: string) {
     super(initToken);
     this.character = character;
     this.attributes = this.addChild("attributes", crdts.Pre(crdts.LwwCMap)());
-    this.deleted = this.addChild(
-      "deleted",
-      crdts.Pre(crdts.LwwCRegister)(false as boolean)
-    );
   }
 
   inheritLeftAttributesLocally(attributes: crdts.LwwCMap<string, any>) {
@@ -39,6 +34,7 @@ interface RichTextEvents extends crdts.CrdtEventsRecord {
 export interface RichTextInsertEvent extends crdts.CrdtEvent {
   startIndex: number;
   text: string;
+  attributes: Record<string, any>;
 }
 
 export interface RichTextDeleteEvent extends crdts.CrdtEvent {
@@ -88,7 +84,10 @@ export class RichText extends crdts.CObject<RichTextEvents> {
       "formatMessenger",
       crdts.Pre(crdts.CMessenger)()
     );
-    this.formatMessenger.on("Message", this.formatMessageHandler);
+    this.formatMessenger.on(
+      "Message",
+      this.frmtMssgHndl_formatCharacters(this)
+    );
 
     this.rtCharArray = this.addChild(
       "rtCharArray",
@@ -97,16 +96,16 @@ export class RichText extends crdts.CObject<RichTextEvents> {
           const newChar = new RichTextCharacter(valueInitToken, character);
           newChar.attributes.on(
             "Set",
-            this.attrSetHndl_emitFormatEvent(newChar)
+            this.attrSetHndl_emitFormatEvent(this)(newChar)
           );
-          newChar.deleted.on("Set", this.delSetHndl_emitDeleteEvent(newChar));
           return newChar;
         },
-        [["start"], ["end"]]
+        [["\n"]]
       )
     );
-    this.rtCharArray.on("Insert", this.charInstHndl_inheritAttributes);
-    this.rtCharArray.on("Insert", this.charInstHndl_emitInsertEvent);
+    this.rtCharArray.on("Insert", this.charInstHndl_inheritAttributes(this));
+    this.rtCharArray.on("Insert", this.charInstHndl_emitInsertEvent(this));
+    this.rtCharArray.on("Delete", this.charDelHndl_emitDeleteEvent(this));
   }
 
   private action_putFormatFirst(
@@ -133,11 +132,12 @@ export class RichText extends crdts.CObject<RichTextEvents> {
     }
   }
 
-  private formatMessageHandler(e: crdts.CMessengerEvent<MFormat>) {
-    this.handleMFormat(this.store.processM1(e.message, e.meta.timestamp));
-  }
+  private frmtMssgHndl_formatCharacters =
+    (model: RichText) => (e: crdts.CMessengerEvent<MFormat>) => {
+      model.handleMFormat(model.store.processM1(e.message, e.meta.timestamp));
+    };
 
-  private handleMFormat(m: MFormat | null) {
+  private handleMFormat = (m: MFormat | null) => {
     if (m) {
       this.runtime.runLocally(() => {
         m.targets.forEach((target) => {
@@ -147,55 +147,64 @@ export class RichText extends crdts.CObject<RichTextEvents> {
         });
       });
     }
-  }
+  };
 
-  private delSetHndl_emitDeleteEvent(character: RichTextCharacter) {
-    return (e: crdts.CRegisterEvent<boolean>) => {
-      this.emit("Delete", {
-        startIndex: this.rtCharArray.findIndex((value) => value === character),
-        count: 1,
-        meta: e.meta,
-      });
+  private attrSetHndl_emitFormatEvent =
+    (model: RichText) => (character: RichTextCharacter) => {
+      return (e: crdts.CMapSetEvent<string, any>) => {
+        model.emit("Format", {
+          startIndex: model.rtCharArray.findIndex(
+            (value) => value === character
+          ),
+          attributeName: e.key,
+          attributeValue: character.attributes.get(e.key),
+          meta: e.meta,
+        });
+      };
     };
-  }
 
-  private attrSetHndl_emitFormatEvent(character: RichTextCharacter) {
-    return (e: crdts.CMapSetEvent<string, any>) => {
-      this.emit("Format", {
-        startIndex: this.rtCharArray.findIndex((value) => value === character),
-        attributeName: e.key,
-        attributeValue: character.attributes.get(e.key),
-        meta: e.meta,
-      });
-    };
-  }
-
-  private charInstHndl_inheritAttributes(e: crdts.CListInsertEvent) {
-    range(e.count).forEach((i) => {
-      const idx = e.startIndex + i;
-      const leftCharAttributes = this.rtCharArray.get(idx - 1).attributes;
-      const character = this.rtCharArray.get(idx);
-
-      character.inheritLeftAttributesLocally(leftCharAttributes);
-
-      // processM2 is more like record M2
-      this.store.processM2({ character }, e.meta.timestamp);
-    });
-  }
-
-  private charInstHndl_emitInsertEvent(e: CListInsertEvent) {
-    const text = range(e.count)
-      .map((i) => {
+  private charInstHndl_inheritAttributes =
+    (model: RichText) => (e: crdts.CListInsertEvent) => {
+      range(e.count).forEach((i) => {
         const idx = e.startIndex + i;
-        return this.rtCharArray.get(idx).character;
-      })
-      .join("");
-    this.emit("Insert", {
-      startIndex: e.startIndex,
-      text,
-      meta: e.meta,
-    });
-  }
+        const character = model.rtCharArray.get(idx);
+
+        if (idx > 0) {
+          const leftCharAttributes = model.rtCharArray.get(idx - 1).attributes;
+          character.inheritLeftAttributesLocally(leftCharAttributes);
+        }
+
+        // processM2 is more like record M2
+        model.store.processM2({ character }, e.meta.timestamp);
+      });
+    };
+
+  private charInstHndl_emitInsertEvent =
+    (model: RichText) => (e: CListInsertEvent) => {
+      const text = range(e.count)
+        .map((i) => {
+          const idx = e.startIndex + i;
+          return model.rtCharArray.get(idx).character;
+        })
+        .join("");
+      model.emit("Insert", {
+        startIndex: e.startIndex,
+        text,
+        attributes: Object.fromEntries(
+          model.rtCharArray.get(e.startIndex).attributes.entries()
+        ),
+        meta: e.meta,
+      });
+    };
+
+  private charDelHndl_emitDeleteEvent =
+    (model: RichText) => (e: crdts.CListDeleteEvent<RichTextCharacter>) => {
+      model.emit("Delete", {
+        startIndex: e.startIndex,
+        count: e.count,
+        meta: e.meta,
+      });
+    };
 
   public formatText(
     startIndex: number,
@@ -203,7 +212,7 @@ export class RichText extends crdts.CObject<RichTextEvents> {
     attributes: Record<string, any>
   ) {
     const targets = range(count).map((i) => {
-      const idx = startIndex + i + 1;
+      const idx = startIndex + i;
       return this.rtCharArray.get(idx);
     });
     this.formatMessenger.sendMessage({ targets, attributes });
@@ -214,13 +223,22 @@ export class RichText extends crdts.CObject<RichTextEvents> {
     text: string,
     attributes: Record<string, any>
   ) {
-    // TODO: Get unique attributes. (Should I handle this logic here or in the code that integrates it with quill?)
-    const leftAttributes = this.rtCharArray.get(startIndex).attributes;
-    const uniqueAttributes = Object.fromEntries(
-      Object.entries(attributes).filter((kv) => {
-        return kv[1] !== leftAttributes.get(kv[0]);
-      })
-    );
+    let uniqueAttributes: Record<string, any> = {};
+    if (startIndex > 0) {
+      const leftAttributes = this.rtCharArray.get(startIndex - 1).attributes;
+      Object.entries(attributes).forEach((kv) => {
+        if (kv[1] !== leftAttributes.get(kv[0])) {
+          uniqueAttributes[kv[0]] = kv[1];
+        }
+      });
+      for (const kv of leftAttributes.entries()) {
+        if (!attributes[kv[0]]) {
+          uniqueAttributes[kv[0]] = null;
+        }
+      }
+    } else {
+      uniqueAttributes = attributes;
+    }
 
     this.insertPlainText(startIndex, text);
     this.formatText(startIndex, text.length, uniqueAttributes);
@@ -228,14 +246,11 @@ export class RichText extends crdts.CObject<RichTextEvents> {
 
   private insertPlainText(startIndex: number, text: string) {
     text.split("").forEach((c, i) => {
-      this.rtCharArray.insert(startIndex + i + 1, c);
+      this.rtCharArray.insert(startIndex + i, c);
     });
   }
 
   public deleteText(startIndex: number, count: number) {
-    range(count).forEach((i) => {
-      const idx = startIndex + i + 1;
-      this.rtCharArray.get(idx).deleted.set(true);
-    });
+    this.rtCharArray.delete(startIndex, count);
   }
 }

@@ -52,10 +52,10 @@ import {RichText, RichTextDeleteEvent, RichTextFormatEvent, RichTextInsertEvent}
 
   // Rich Text CRDT event handling
   let Delta = Quill.import("delta");
-  richText.on("Insert", ({ startIndex, text, meta }: RichTextInsertEvent) => {
+  richText.on("Insert", ({ startIndex, text, attributes, meta }: RichTextInsertEvent) => {
     if (!meta.isLocal) {
       quill.updateContents(
-        new Delta().retain(startIndex).insert(text)
+        new Delta().retain(startIndex).insert(text, attributes)
       );
     }
   });
@@ -67,6 +67,7 @@ import {RichText, RichTextDeleteEvent, RichTextFormatEvent, RichTextInsertEvent}
   richText.on(
     "Format",
     ({ startIndex, attributeName, attributeValue, meta }: RichTextFormatEvent) => {
+      // Ok i think the issue is that the format eent fired before the insert event. Easy now.
       quill.updateContents(new Delta().retain(startIndex).retain(1, { [attributeName]: attributeValue }));
     }
   );

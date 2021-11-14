@@ -28,6 +28,7 @@ import Quill, { DeltaOperation } from "quill";
   });
   interface IDelta {
     ops: DeltaOperation[];
+    
   }
 
   const getRelevantDeltaOperations = (
