@@ -35,7 +35,7 @@ import {RichText, RichTextDeleteEvent, RichTextFormatEvent, RichTextInsertEvent}
   ): void {
     switch (true) {
       case !!op.insert:
-        richText.insertRichText(
+        richText.insertFormattedText(
           startIndex,
           op.insert as string,
           op.attributes ?? {}

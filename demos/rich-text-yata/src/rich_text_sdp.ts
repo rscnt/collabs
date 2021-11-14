@@ -55,12 +55,12 @@ interface MFormat {
   attributes: Record<string, any>;
 }
 
-interface MPlainTextInsert {
+interface MUnformattedTextInsert {
   character: RichTextCharacter;
 }
 
 export class RichText extends crdts.CObject<RichTextEvents> {
-  private store: crdts.SemidirectProductStore<MFormat, MPlainTextInsert>;
+  private store: crdts.SemidirectProductStore<MFormat, MUnformattedTextInsert>;
   private formatMessenger: crdts.CMessenger<MFormat>;
   private rtCharArray: crdts.DeletingMutCList<
     RichTextCharacter,
@@ -109,7 +109,7 @@ export class RichText extends crdts.CObject<RichTextEvents> {
   }
 
   private action_putFormatFirst(
-    m2: MPlainTextInsert,
+    m2: MUnformattedTextInsert,
     m1: MFormat
   ): MFormat | null {
     const insertedChar = m2.character;
@@ -218,7 +218,7 @@ export class RichText extends crdts.CObject<RichTextEvents> {
     this.formatMessenger.sendMessage({ targets, attributes });
   }
 
-  public insertRichText(
+  public insertFormattedText(
     startIndex: number,
     text: string,
     attributes: Record<string, any>
@@ -240,11 +240,11 @@ export class RichText extends crdts.CObject<RichTextEvents> {
       uniqueAttributes = attributes;
     }
 
-    this.insertPlainText(startIndex, text);
+    this.insertUnformattedText(startIndex, text);
     this.formatText(startIndex, text.length, uniqueAttributes);
   }
 
-  private insertPlainText(startIndex: number, text: string) {
+  private insertUnformattedText(startIndex: number, text: string) {
     text.split("").forEach((c, i) => {
       this.rtCharArray.insert(startIndex + i, c);
     });
