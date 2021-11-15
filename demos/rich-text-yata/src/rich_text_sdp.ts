@@ -9,10 +9,12 @@ class RichTextCharacter extends crdts.CObject {
   // This is the structure of each object in the array.
   public character: string; // Character being represented
   public attributes: crdts.LwwCMap<string, any>; // Current attributes CRDT
+  public uniquelySet: string[];
 
-  constructor(initToken: crdts.CrdtInitToken, character: string) {
+  constructor(initToken: crdts.CrdtInitToken, character: string, uniquelySetAttributes: string[]) {
     super(initToken);
     this.character = character;
+    this.uniquelySet = uniquelySetAttributes;
     this.attributes = this.addChild("attributes", crdts.Pre(crdts.LwwCMap)());
   }
 
@@ -48,11 +50,12 @@ export interface RichTextFormatEvent extends crdts.CrdtEvent {
   attributeValue: any;
 }
 
-type RichTextArrayInsertArgs = [character: string];
+type RichTextArrayInsertArgs = [character: string, uniquelySetAttributes: string[]];
 
 interface MFormat {
   targets: RichTextCharacter[];
-  attributes: Record<string, any>;
+  attributeName: string;
+  attributeValue: any;
 }
 
 interface MUnformattedTextInsert {
@@ -92,15 +95,15 @@ export class RichText extends crdts.CObject<RichTextEvents> {
     this.rtCharArray = this.addChild(
       "rtCharArray",
       crdts.Pre(crdts.DeletingMutCList)(
-        (valueInitToken: crdts.CrdtInitToken, character: string) => {
-          const newChar = new RichTextCharacter(valueInitToken, character);
+        (valueInitToken: crdts.CrdtInitToken, character: string, uniquelySetAttributes: string[]) => {
+          const newChar = new RichTextCharacter(valueInitToken, character, uniquelySetAttributes);
           newChar.attributes.on(
             "Set",
             this.attrSetHndl_emitFormatEvent(this)(newChar)
           );
           return newChar;
         },
-        [["\n"]]
+        [["\n", []]]
       )
     );
     this.rtCharArray.on("Insert", this.charInstHndl_inheritAttributes(this));
@@ -113,19 +116,16 @@ export class RichText extends crdts.CObject<RichTextEvents> {
     m1: MFormat
   ): MFormat | null {
     const insertedChar = m2.character;
-    const insertedCharIdx = this.rtCharArray.findIndex(
-      (value) => value === insertedChar
-    );
+    const insertedCharIdx = this.rtCharArray.indexOf(insertedChar);
 
     const rightmostTargetedChar = m1.targets[m1.targets.length - 1];
-    const rightmostTargetedCharIdx = this.rtCharArray.findIndex(
-      (value) => value === rightmostTargetedChar
-    );
+    const rightmostTargetedCharIdx = this.rtCharArray.indexOf(rightmostTargetedChar);
 
-    if (insertedCharIdx - rightmostTargetedCharIdx === 1) {
+    if (insertedCharIdx - rightmostTargetedCharIdx === 1 && !insertedChar.uniquelySet.includes(m1.attributeName)) {
       return {
         targets: [...m1.targets, insertedChar],
-        attributes: m1.attributes,
+        attributeName: m1.attributeName,
+        attributeValue: m1.attributeValue
       };
     } else {
       return m1;
@@ -141,9 +141,7 @@ export class RichText extends crdts.CObject<RichTextEvents> {
     if (m) {
       this.runtime.runLocally(() => {
         m.targets.forEach((target) => {
-          Object.entries(m.attributes).forEach((kv) => {
-            target.attributes.set(kv[0], kv[1]);
-          });
+          target.attributes.set(m.attributeName, m.attributeValue);
         });
       });
     }
@@ -215,7 +213,9 @@ export class RichText extends crdts.CObject<RichTextEvents> {
       const idx = startIndex + i;
       return this.rtCharArray.get(idx);
     });
-    this.formatMessenger.sendMessage({ targets, attributes });
+    Object.entries(attributes).forEach((kv) => {
+      this.formatMessenger.sendMessage({ targets, attributeName: kv[0], attributeValue: kv[1] });
+    });
   }
 
   public insertFormattedText(
@@ -240,13 +240,13 @@ export class RichText extends crdts.CObject<RichTextEvents> {
       uniqueAttributes = attributes;
     }
 
-    this.insertUnformattedText(startIndex, text);
+    this.insertUnformattedText(startIndex, text, Object.keys(uniqueAttributes));
     this.formatText(startIndex, text.length, uniqueAttributes);
   }
 
-  private insertUnformattedText(startIndex: number, text: string) {
+  private insertUnformattedText(startIndex: number, text: string, uniquelySetAttributes: string[]) {
     text.split("").forEach((c, i) => {
-      this.rtCharArray.insert(startIndex + i, c);
+      this.rtCharArray.insert(startIndex + i, c, uniquelySetAttributes);
     });
   }
 
