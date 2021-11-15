@@ -19,7 +19,7 @@ import {RichText, RichTextDeleteEvent, RichTextFormatEvent, RichTextInsertEvent}
   
   // Quill event handling
   quill.on("text-change", (delta, oldDelta, source) => {
-    if (source === "user") {
+    if (!ourChange) {
       let startIndex = 0;
       delta.forEach((op) => {
         if (!op.retain || op.attributes) {
@@ -52,23 +52,32 @@ import {RichText, RichTextDeleteEvent, RichTextFormatEvent, RichTextInsertEvent}
 
   // Rich Text CRDT event handling
   let Delta = Quill.import("delta");
+  type Delta = {
+    ops: DeltaOperation[];
+  };
+  let ourChange = false;
+  function updateContents(delta: Delta) {
+    ourChange = true;
+    quill.updateContents(delta as any);
+    ourChange = false;
+  }
   richText.on("Insert", ({ startIndex, text, attributes, meta }: RichTextInsertEvent) => {
     if (!meta.isLocal) {
-      quill.updateContents(
+      updateContents(
         new Delta().retain(startIndex).insert(text, attributes)
       );
     }
   });
   richText.on("Delete", ({ startIndex, count, meta }: RichTextDeleteEvent) => {
     if (!meta.isLocal) {
-      quill.updateContents(new Delta().retain(startIndex).delete(count));
+      updateContents(new Delta().retain(startIndex).delete(count));
     }
   });
   richText.on(
     "Format",
     ({ startIndex, attributeName, attributeValue, meta }: RichTextFormatEvent) => {
       // Ok i think the issue is that the format eent fired before the insert event. Easy now.
-      quill.updateContents(new Delta().retain(startIndex).retain(1, { [attributeName]: attributeValue }));
+      updateContents(new Delta().retain(startIndex).retain(1, { [attributeName]: attributeValue }));
     }
   );
 })();
