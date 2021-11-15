@@ -77,9 +77,7 @@ export class RichText extends crdts.CObject<RichTextEvents> {
       "store",
       crdts.Pre(crdts.SemidirectProductStore)(
         this.action_putFormatFirst,
-        crdts.DefaultElementSerializer.getInstance(),
-        true,
-        true
+        crdts.DefaultElementSerializer.getInstance()
       )
     );
 
