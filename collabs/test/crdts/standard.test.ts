@@ -18,7 +18,7 @@ import {
   Optional,
 } from "../../src";
 import { debug } from "../debug";
-import seedrandom from "seedrandom";
+import seedrandom = require("seedrandom");
 
 describe("standard", () => {
   let appGen: TestingCRDTAppGenerator;

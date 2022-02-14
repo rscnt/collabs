@@ -11,6 +11,7 @@ export class CText extends PrimitiveCList<string> {
    * @return this's string value
    */
   toString() {
+    // TODO: optimize
     return this.join("");
   }
 }

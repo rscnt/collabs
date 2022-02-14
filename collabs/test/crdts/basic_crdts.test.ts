@@ -9,7 +9,7 @@ import {
   TestingCRDTAppGenerator,
   Optional,
 } from "../../src";
-import seedrandom from "seedrandom";
+import seedrandom = require("seedrandom");
 import {
   AddComponent,
   CNumberState,
