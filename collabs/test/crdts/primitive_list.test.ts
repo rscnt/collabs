@@ -133,4 +133,86 @@ describe("PrimitiveCList", () => {
       assert.deepStrictEqual(bobList.slice(), ans);
     });
   });
+
+  describe("inserts concurrently", () => {
+    it("at root", () => {
+      aliceList.insert(0, 1);
+      bobList.insert(0, 2);
+      appGen.releaseAll();
+
+      assert.deepStrictEqual(aliceList.slice(), bobList.slice());
+      const ans = aliceList.slice();
+      if (ans[0] === 1) {
+        assert.deepStrictEqual(ans, [1, 2]);
+      } else {
+        assert.deepStrictEqual(ans, [2, 1]);
+      }
+    });
+
+    it("at alice node going right", () => {
+      aliceList.insert(0, 0);
+      appGen.releaseAll();
+
+      aliceList.insert(1, 1);
+      bobList.insert(1, 2);
+      appGen.releaseAll();
+
+      assert.deepStrictEqual(aliceList.slice(), [0, 1, 2]);
+      assert.deepStrictEqual(bobList.slice(), [0, 1, 2]);
+    });
+
+    it("at alice node going left", () => {
+      aliceList.insert(0, 0);
+      appGen.releaseAll();
+
+      aliceList.insert(0, 1);
+      bobList.insert(0, 2);
+      appGen.releaseAll();
+
+      assert.deepStrictEqual(aliceList.slice(), [2, 1, 0]);
+      assert.deepStrictEqual(bobList.slice(), [2, 1, 0]);
+    });
+
+    it("at other node going right", () => {
+      const charlie = appGen.newApp(undefined, rng);
+      const charlieList = charlie.registerCollab(
+        "list",
+        Pre(PrimitiveCList)<number>()
+      );
+      charlie.load(Optional.empty());
+
+      charlieList.insert(0, 0);
+      appGen.releaseAll();
+
+      aliceList.insert(1, 1);
+      bobList.insert(1, 2);
+      appGen.releaseAll();
+
+      const ans = aliceList.get(1) === 1 ? [0, 1, 2] : [0, 2, 1];
+      assert.deepStrictEqual(aliceList.slice(), ans);
+      assert.deepStrictEqual(bobList.slice(), ans);
+      assert.deepStrictEqual(charlieList.slice(), ans);
+    });
+
+    it("at other node going left", () => {
+      const charlie = appGen.newApp(undefined, rng);
+      const charlieList = charlie.registerCollab(
+        "list",
+        Pre(PrimitiveCList)<number>()
+      );
+      charlie.load(Optional.empty());
+
+      charlieList.insert(0, 0);
+      appGen.releaseAll();
+
+      aliceList.insert(0, 1);
+      bobList.insert(0, 2);
+      appGen.releaseAll();
+
+      const ans = aliceList.get(1) === 1 ? [2, 1, 0] : [1, 2, 0];
+      assert.deepStrictEqual(aliceList.slice(), ans);
+      assert.deepStrictEqual(bobList.slice(), ans);
+      assert.deepStrictEqual(charlieList.slice(), ans);
+    });
+  });
 });

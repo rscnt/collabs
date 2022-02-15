@@ -269,16 +269,18 @@ export class PrimitiveCList<T>
           );
         }
       } else {
-        // child is a waypoint. It need not be
-        // a descendant of left neighbor: it might be a
-        // true child of some other value.
+        // child is a waypoint. It is a descendant of
+        // left neighbor iff its parentIndex points to
+        // a descendant of left neighbor.
         trueIndex = this.getTrueIndex(
           leftWaypoint,
           leftChildIndex,
           leftValueIndex
         );
-        if (trueIndex >= 0 && child.parentIndex >= trueIndex) {
-          // child is indeed a descendant of leftNeighbor.
+        if (
+          child.parentIndex === trueIndex ||
+          (trueIndex >= 0 && child.parentIndex > trueIndex)
+        ) {
           return this.insertLeftmostDescendant(child, value);
         }
         // Else right neighbor is not a descendant of left neighbor;
@@ -455,6 +457,7 @@ export class PrimitiveCList<T>
   protected receivePrimitive(message: Message, meta: MessageMeta): void {
     // TODO: events
     const decoded = PrimitiveCListMessage.decode(<Uint8Array>message);
+    // console.log(decoded);
     switch (decoded.op) {
       case "insertOpt": {
         const value = this.valueSerializer.deserialize(
@@ -591,66 +594,182 @@ export class PrimitiveCList<T>
         // - Values with the same waypoint bind towards its center
         // (index 0).
         // - Waypoints are sorted lexicographically by sender.
+        //
+        // The result is:
+        // - If newWaypoint is a right child and its
+        // true parent is on the right side of its
+        // waypoint (parentIndex >= 0),
+        // or it is a left child and its true parent is on
+        // the left side of its waypoint (parentIndex <= 0),
+        // then newWaypoint goes on the far end, sorted
+        // among analagous waypoints, in LtR order:
+        // sort by parentIndex reversed, then sender.
+        // - Else, newWaypoint goes between the value
+        // with its parentIndex and the next value on
+        // newWaypoint's side, sorted among analogous
+        // waypoints by sender.
 
         const side = parentWaypointCounterAndSide >= 0 ? "right" : "left";
 
-        // First find parentIndex within parentWaypoint.children.
-        let childIndex = 0;
-        let valueIndex = parentIndex - parentWaypoint.startIndex;
-        for (; childIndex < parentWaypoint.children.length; childIndex++) {
-          const child = parentWaypoint.children[childIndex];
-          if (typeof child === "number") {
-            if (valueIndex < child) break;
-            valueIndex -= child;
-          } else if (Array.isArray(child)) {
-            if (valueIndex < child.length) break;
-            valueIndex -= child.length;
-          } // else Waypoint child; skip.
-        }
-        if (childIndex === parentWaypoint.children.length) {
-          throw new Error(`parentIndex too large: ${parentIndex}`);
-        }
-        const child = parentWaypoint.children[childIndex];
+        if (side === "right" && parentIndex >= 0) {
+          // Far right. Walk analogous waypoints until
+          // we find a lesser one.
+          let insertionIndex!: number;
+          for (
+            let childIndex = parentWaypoint.children.length - 1;
+            childIndex >= 0;
+            childIndex--
+          ) {
+            const child = parentWaypoint.children[childIndex];
+            if (typeof child === "number" || Array.isArray(child)) {
+              // Done walking waypoints; insert after child.
+              insertionIndex = childIndex + 1;
+              break;
+            } else {
+              if (
+                child.parentIndex > parentIndex ||
+                (child.parentIndex === parentIndex &&
+                  child.sender < meta.sender)
+              ) {
+                // child is a lesser waypoint; insert after it.
+                insertionIndex = childIndex + 1;
+                break;
+              }
+            }
+          }
+          // TODO: remove
+          if (insertionIndex === undefined) {
+            throw new Error("insertionIndex undefined");
+          }
+          parentWaypoint.children.splice(insertionIndex, 0, newWaypoint);
+        } else if (side === "left" && parentIndex <= 0) {
+          // Far left. Walk analogous waypoints until
+          // we find a greater one.
+          let insertionIndex!: number;
+          for (
+            let childIndex = 0;
+            childIndex < parentWaypoint.children.length;
+            childIndex++
+          ) {
+            const child = parentWaypoint.children[childIndex];
+            if (typeof child === "number" || Array.isArray(child)) {
+              // Done walking waypoints; insert before child.
+              insertionIndex = childIndex;
+              break;
+            } else {
+              if (
+                child.parentIndex < parentIndex ||
+                (child.parentIndex === parentIndex &&
+                  child.sender > meta.sender)
+              ) {
+                // child is a greater waypoint; insert before it.
+                insertionIndex = childIndex;
+                break;
+              }
+            }
+          }
+          // TODO: remove
+          if (insertionIndex === undefined) {
+            throw new Error("insertionIndex undefined");
+          }
+          parentWaypoint.children.splice(insertionIndex, 0, newWaypoint);
+        } else {
+          // newWaypoint goes in between values.
+          // First find the (possibly deleted) value at parentIndex
+          // within parentWaypoint.children.
+          let childIndex = 0;
+          let valueIndex = parentIndex - parentWaypoint.startIndex;
+          for (; childIndex < parentWaypoint.children.length; childIndex++) {
+            const child = parentWaypoint.children[childIndex];
+            if (typeof child === "number") {
+              if (valueIndex < child) break;
+              valueIndex -= child;
+            } else if (Array.isArray(child)) {
+              if (valueIndex < child.length) break;
+              valueIndex -= child.length;
+            } // else Waypoint child; skip.
+          }
+          if (childIndex === parentWaypoint.children.length) {
+            throw new Error(`parentIndex too large: ${parentIndex}`);
+          }
+          const child = <number | T[]>parentWaypoint.children[childIndex];
+          const childLength = typeof child === "number" ? child : child.length;
 
-        // Now do cases depending on the type of child.
-        if (typeof child === "number" || Array.isArray(child)) {
-          const length = typeof child === "number" ? child : child.length;
           if (side === "left" && valueIndex === 0) {
-            // We're before the first value represented by
-            // this delete entry.
-            parentWaypoint.children.splice(childIndex, 0, newWaypoint);
-          } else if (side === "right" && valueIndex === length - 1) {
-            // We're after the last value.
-            parentWaypoint.children.splice(childIndex + 1, 0, newWaypoint);
+            // We go on the left side of child. Loop over
+            // analogous waypoints until we find one with
+            // lesser sender.
+            let insertionIndex: number | undefined;
+            for (
+              let searchIndex = childIndex - 1;
+              searchIndex >= 0;
+              searchIndex--
+            ) {
+              const maybeTied = parentWaypoint.children[searchIndex];
+              if (typeof maybeTied === "number" || Array.isArray(maybeTied)) {
+                // Not actually tied; insert after it.
+                insertionIndex = searchIndex + 1;
+                break;
+              } else if (maybeTied.sender < meta.sender) {
+                // Found a lesser tied waypoint; insert after it.
+                insertionIndex = searchIndex + 1;
+                break;
+              }
+            }
+            if (insertionIndex === undefined) {
+              // We are less than everything.
+              insertionIndex = 0;
+            }
+            parentWaypoint.children.splice(insertionIndex, 0, newWaypoint);
+          } else if (side === "right" && valueIndex === childLength - 1) {
+            // We go on the right side of child. Loop over
+            // analogous waypoints until we find one with
+            // greater sender.
+            let insertionIndex: number | undefined;
+            for (
+              let searchIndex = childIndex + 1;
+              searchIndex < parentWaypoint.children.length;
+              searchIndex++
+            ) {
+              const maybeTied = parentWaypoint.children[searchIndex];
+              if (typeof maybeTied === "number" || Array.isArray(maybeTied)) {
+                // Not actually tied; insert before it.
+                insertionIndex = searchIndex;
+                break;
+              } else if (maybeTied.sender > meta.sender) {
+                // Found a greater tied waypoint; insert before it.
+                insertionIndex = searchIndex;
+                break;
+              }
+            }
+            if (insertionIndex === undefined) {
+              // We are greater than everything.
+              insertionIndex = parentWaypoint.children.length;
+            }
+            parentWaypoint.children.splice(insertionIndex, 0, newWaypoint);
           } else {
-            // We split the child.
-            const onOurLeft = side === "left" ? valueIndex : valueIndex + 1;
+            // We split child. This implies that there are
+            // no tied waypoints.
+            const childValuesOnOurLeft =
+              side === "left" ? valueIndex : valueIndex + 1;
             if (typeof child === "number") {
               parentWaypoint.children.splice(
                 childIndex,
                 1,
-                onOurLeft,
+                childValuesOnOurLeft,
                 newWaypoint,
-                child - onOurLeft
+                child - childValuesOnOurLeft
               );
             } else {
               parentWaypoint.children.splice(
                 childIndex,
                 1,
-                child.slice(0, onOurLeft),
+                child.slice(0, childValuesOnOurLeft),
                 newWaypoint,
-                child.slice(onOurLeft)
+                child.slice(childValuesOnOurLeft)
               );
             }
           }
-        } else {
-          // Eue to the tiebreaker rule favoring parentWaypoint.sender's
-          // own values, we know that we are not in the middle
-          // of this waypoint child, but instead a new
-          // child adjacent to it, closer to the center.
-          const newWaypointChildIndex =
-            parentWaypointCounterAndSide >= 0 ? childIndex + 1 : childIndex;
-          parentWaypoint.children.splice(newWaypointChildIndex, 0, newWaypoint);
         }
 
         // Update numValues for waypoint and its ancestors.

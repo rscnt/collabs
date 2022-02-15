@@ -123,10 +123,6 @@ class AutomergePerfBenchmark {
       let round = 0;
       let op: number;
       for (op = 0; op < OPS; op++) {
-        // TODO: remove
-        // if (op === 228168) {
-        //   (<any>this.testFactory).debug();
-        // }
         if (frequency === "rounds" && op !== 0 && op % ROUND_OPS === 0) {
           // Record result
           let ans: { [measurement: string]: number } = {};
@@ -496,10 +492,6 @@ function text() {
       app = generator.newApp(new collabs.ManualBatchingStrategy(), rng);
       list = app.registerCollab("text", collabs.Pre(collabs.CText)());
       app.load(collabs.Optional.of(saveData));
-    },
-    // @ts-ignore
-    debug() {
-      list!.printTreeWalk();
     },
   });
 }
