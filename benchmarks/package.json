@@ -51,6 +51,7 @@
   },
   "scripts": {
     "start": "node -r dotenv/config --expose-gc --max-old-space-size=3000 --enable-source-maps build/src/paper/main.js",
+    "inspect": "node -r dotenv/config --expose-gc --max-old-space-size=3000 --enable-source-maps --inspect build/src/paper/main.js",
     "build": "npm-run-all build:*",
     "build:ts": "tsc -p tsconfig.json",
     "test": "npm-run-all test:*",

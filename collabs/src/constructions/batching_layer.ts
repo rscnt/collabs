@@ -366,12 +366,16 @@ export class BatchingLayer
       try {
         this.child.receive(childMessagePath, meta);
       } catch (err) {
-        // Don't let the error block other messages' delivery,
-        // but still make it print
-        // its error like it was unhandled.
-        void Promise.resolve().then(() => {
+        if (meta.isLocalEcho) {
           throw err;
-        });
+        } else {
+          // Don't let the error block other messages' delivery,
+          // but still make it print
+          // its error like it was unhandled.
+          void Promise.resolve().then(() => {
+            throw err;
+          });
+        }
       } finally {
         this.inChildReceive = false;
       }

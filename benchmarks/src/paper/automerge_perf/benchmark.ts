@@ -16,8 +16,6 @@ import { assert } from "chai";
 
 const DEBUG = false;
 
-// const OPS = 1388;
-// TODO: restore
 const OPS = edits.length;
 const ROUND_OPS = 25978;
 const SEED = "42";
@@ -185,6 +183,10 @@ class AutomergePerfBenchmark {
         // if (measurement === "memory") await sleep(0);
       }
 
+      // // For profiling memory usage:
+      // console.log("Ready to profile");
+      // await new Promise((resolve) => setTimeout(resolve, 1000 * 1000));
+
       // // For profiling save times:
       // console.log("saving repeatedly");
       // while (true) {
@@ -199,6 +201,7 @@ class AutomergePerfBenchmark {
       // console.log("getText() time: " + textTime);
 
       // Record result
+
       // TODO: de-duplicate code (shared with rounds measurements)
       let result: { [measurement: string]: number } = {};
       switch (measurement) {

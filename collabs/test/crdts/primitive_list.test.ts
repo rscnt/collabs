@@ -157,8 +157,9 @@ describe("PrimitiveCList", () => {
       bobList.insert(1, 2);
       appGen.releaseAll();
 
-      assert.deepStrictEqual(aliceList.slice(), [0, 1, 2]);
-      assert.deepStrictEqual(bobList.slice(), [0, 1, 2]);
+      const ans = aliceList.get(1) === 1 ? [0, 1, 2] : [0, 2, 1];
+      assert.deepStrictEqual(aliceList.slice(), ans);
+      assert.deepStrictEqual(bobList.slice(), ans);
     });
 
     it("at alice node going left", () => {
@@ -169,8 +170,9 @@ describe("PrimitiveCList", () => {
       bobList.insert(0, 2);
       appGen.releaseAll();
 
-      assert.deepStrictEqual(aliceList.slice(), [2, 1, 0]);
-      assert.deepStrictEqual(bobList.slice(), [2, 1, 0]);
+      const ans = aliceList.get(1) === 1 ? [2, 1, 0] : [1, 2, 0];
+      assert.deepStrictEqual(aliceList.slice(), ans);
+      assert.deepStrictEqual(bobList.slice(), ans);
     });
 
     it("at other node going right", () => {

@@ -106,21 +106,12 @@ export class CRDTRuntime
       );
     }
     this.inRootReceive = true;
-    try {
-      this.rootCollab.receive([...messagePathBytes], {
-        sender: this.replicaID,
-        isLocalEcho: true,
-      });
-    } catch (err) {
-      // Don't let the error block other messages' delivery,
-      // but still make it print
-      // its error like it was unhandled.
-      setTimeout(() => {
-        throw err;
-      });
-    } finally {
-      this.inRootReceive = false;
-    }
+    // Note this might error, disrupting the send.
+    this.rootCollab.receive([...messagePathBytes], {
+      sender: this.replicaID,
+      isLocalEcho: true,
+    });
+    this.inRootReceive = false;
 
     // Serialize messagePathBytes.
     // Opt: avoid copying the inner Uint8Array's, by serializing
@@ -201,10 +192,10 @@ export class CRDTRuntime
         isLocalEcho: false,
       });
     } catch (err) {
-      // Don't let the error block other messages' delivery,
-      // but still make it print
+      // Don't let the error block other messages'
+      // delivery, but still make it print
       // its error like it was unhandled.
-      setTimeout(() => {
+      void Promise.resolve().then(() => {
         throw err;
       });
     } finally {
